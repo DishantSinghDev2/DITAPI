@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  ditapi-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      # These should ideally be managed by a secret management system in production
+      # For local development, you can put them here or in a .env file
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      NEXT_PUBLIC_DITAPI_SUBDOMAIN_BASE: ${NEXT_PUBLIC_DITAPI_SUBDOMAIN_BASE}
+      GATEWAY_ENABLE_RATE_LIMITING: "true"
+      GATEWAY_ENABLE_QUOTA_ENFORCEMENT: "true"
+      GATEWAY_ENABLE_AUTHENTICATION: "true"
+      GATEWAY_ENABLE_ANALYTICS: "true"
+      GATEWAY_ENABLE_CORS: "true"
+      GATEWAY_LOG_LEVEL: "info"
+    depends_on:
+      - ditapi-db
+      # - ditapi-redis # Uncomment if you run a local Redis instance
+    networks:
+      - ditapi-network
+
+  ditapi-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - ditapi-network
+
+  # ditapi-redis: # Uncomment if you run a local Redis instance
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "6379:6379"
+  #   networks:
+  #     - ditapi-network
+  #   command: redis-server --appendonly yes
+  #   volumes:
+  #     - redis_data:/data
+
+volumes:
+  db_data:
+  # redis_data: # Uncomment if you run a local Redis instance
+
+networks:
+  ditapi-network:
+    driver: bridge

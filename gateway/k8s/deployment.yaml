@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ditapi-gateway
+  labels:
+    app: ditapi-gateway
+spec:
+  replicas: 3 # Adjust based on your scaling needs
+  selector:
+    matchLabels:
+      app: ditapi-gateway
+  template:
+    metadata:
+      labels:
+        app: ditapi-gateway
+    spec:
+      containers:
+      - name: ditapi-gateway
+        image: your-docker-registry/ditapi-gateway:latest # Replace with your image
+        ports:
+        - containerPort: 8080
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: ditapi-secrets
+              key: DATABASE_URL
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: ditapi-secrets
+              key: JWT_SECRET
+        - name: NEXT_PUBLIC_DITAPI_SUBDOMAIN_BASE
+          valueFrom:
+            configMapKeyRef:
+              name: ditapi-config
+              key: NEXT_PUBLIC_DITAPI_SUBDOMAIN_BASE
+        - name: GATEWAY_ENABLE_RATE_LIMITING
+          value: "true"
+        - name: GATEWAY_ENABLE_QUOTA_ENFORCEMENT
+          value: "true"
+        - name: GATEWAY_ENABLE_AUTHENTICATION
+          value: "true"
+        - name: GATEWAY_ENABLE_ANALYTICS
+          value: "true"
+        - name: GATEWAY_ENABLE_CORS
+          value: "true"
+        - name: GATEWAY_LOG_LEVEL
+          value: "info"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/health # Assuming your Next.js app exposes a health endpoint
+            port: 3000 # Next.js app port
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      imagePullSecrets:
+      - name: regcred # If pulling from a private registry
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ditapi-gateway-service
+spec:
+  selector:
+    app: ditapi-gateway
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080 # The port your gateway container listens on
+  type: LoadBalancer # Or ClusterIP if you use an Ingress controller
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ditapi-gateway-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2 # Example for path-based routing
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod" # Uncomment for SSL with cert-manager
+spec:
+  ingressClassName: nginx # Or your specific ingress controller class
+  rules:
+  - host: api.your-ditapi-domain.com # Replace with your API gateway domain
+    http:
+      paths:
+      - path: /api(/|$)(.*) # Matches /api and anything after it
+        pathType: Prefix
+        backend:
+          service:
+            name: ditapi-gateway-service
+            port:
+              number: 80
+  # tls: # Uncomment for SSL
+  # - hosts:
+  #   - api.your-ditapi-domain.com
+  #   secretName: ditapi-gateway-tls
