@@ -1,17 +1,14 @@
 import { NextResponse } from "next/server"
-import { getSession } from "@/app/session"
+import { deleteSession } from "@/app/session"
 
-export async function GET() {
+export async function POST() {
   try {
-    const user = await getSession()
+    await deleteSession()
 
-    if (!user) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
-    }
 
     return NextResponse.json({
       success: true,
-      user,
+      message: "Successfully signed out"
     })
   } catch (error) {
     console.error("Auth check error:", error)

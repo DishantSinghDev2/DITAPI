@@ -1,101 +1,109 @@
-import type {
+// Re-export all database types for convenience
+export type {
   User,
-  API,
+  Provider,
   Category,
+  API,
   PricingPlan,
   Subscription,
   Application,
   UserApiKey,
-  Provider,
+  APIUsage,
+  APIRequest,
   Review,
+  ApiCategory,
+  PlatformStats,
+  ApiMetrics,
+  UsageData,
 } from "./database"
 
-// Re-export database types for convenience
-export type { User, API, Category, PricingPlan, Subscription, Application, UserApiKey, Provider, Review }
-
-// --- Frontend Specific Types ---
-
-// User session type (simplified for client-side use)
-export interface UserSession {
+// Additional API-specific types
+export interface ApiKey {
   id: string
-  email: string
-  username: string
-  fullName?: string
-  role: "developer" | "provider" | "admin"
-  isVerified: boolean
+  applicationId: string
+  apiId: string
+  keyValue: string
+  name?: string
+  isActive: boolean
+  createdAt: Date
+  expiresAt?: Date
+  lastUsedAt?: Date
+  createdByUserId: string
 }
 
-// Gateway Request/Response types
-export interface GatewayRequest {
-  method: string
-  url: string
-  headers: Record<string, string>
-  body: string | null
-  ip: string
-}
-
-export interface GatewayResponse {
-  status: number
-  headers: Record<string, string>
-  body: string | null
-}
-
-// API Marketplace specific types
-export interface ApiCardProps {
-  api: API
-}
-
-export interface ApiDetailsProps {
-  api: API
-  pricingPlans: PricingPlan[]
-  reviews: Review[]
-}
-
-export interface ApiTesterProps {
-  api: API
-  userApiKey?: UserApiKey
-}
-
-export interface ApiPricingProps {
-  api: API
-  pricingPlans: PricingPlan[]
-  userSubscription?: Subscription
-}
-
-export interface ApiReviewsProps {
-  api: API
-  reviews: Review[]
-  currentUser?: UserSession
-}
-
-// Dashboard specific types
-export interface DeveloperDashboardProps {
-  user: UserSession
-  applications: Application[]
-  subscriptions: Subscription[]
-  apiUsage: any[] // Detailed usage stats
-}
-
-export interface ProviderDashboardProps {
-  provider: Provider
-  apis: API[]
-  apiUsage: any[] // Detailed usage stats for provider's APIs
-}
-
-export interface AdminDashboardProps {
-  platformStats: {
-    totalApis: number
-    totalProviders: number
-    totalUsers: number
-    totalRequestsLast24h: number
+export interface ApiSubscription {
+  id: string
+  userId: string
+  apiId: string
+  pricingPlanId: string
+  status: "active" | "cancelled" | "past_due" | "trialing"
+  currentPeriodStart: Date
+  currentPeriodEnd: Date
+  cancelAtPeriodEnd: boolean
+  stripeSubscriptionId?: string
+  stripeCustomerId?: string
+  createdAt: Date
+  updatedAt: Date
+  api?: {
+    id: string
+    name: string
+    slug: string
+    description: string
+    logoUrl?: string
   }
-  topApisByUsage: API[]
-  recentSignups: User[]
+  pricingPlan?: {
+    id: string
+    name: string
+    price: number
+    billingPeriod: string
+    requestLimit: number
+  }
+  apiKeys?: ApiKey[]
 }
 
-// Auth form types
-export interface AuthFormState {
-  message: string
-  success: boolean
-  errors?: Record<string, string[]>
+export interface UserApplication {
+  id: string
+  userId: string
+  name: string
+  description?: string
+  website?: string
+  createdAt: Date
+  updatedAt: Date
+  apiKeys?: ApiKey[]
+}
+
+export interface CreateApplicationData {
+  name: string
+  description?: string
+  website?: string
+}
+
+export interface CreateApiKeyData {
+  applicationId: string
+  apiId: string
+  name?: string
+}
+
+export interface ApiKeyResponse {
+  id: string
+  name?: string
+  keyValue: string
+  keyPrefix: string
+  isActive: boolean
+  createdAt: Date
+  expiresAt?: Date
+}
+
+export interface DashboardStats {
+  totalApplications: number
+  totalApiKeys: number
+  totalSubscriptions: number
+  monthlyRequests: number
+}
+
+export interface UsageMetrics {
+  requests: number
+  errors: number
+  avgResponseTime: number
+  dataTransferred: number
 }

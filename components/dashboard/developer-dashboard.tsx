@@ -24,14 +24,13 @@ import {
   createApplication,
   updateApplication,
   deleteApplication,
-  generateApiKey,
-  deleteApiKey,
   getUserSubscriptions,
   cancelSubscription,
 } from "@/lib/actions/dashboard-actions"
 import type { UserSession, UserApplication, ApiSubscription } from "@/types/api"
 import { format } from "date-fns"
 import { RealtimeAnalytics } from "./real-time-analytics"
+import { generateApiKey, deleteApiKey } from "@/lib/actions/api-key-actions"
 
 interface DeveloperDashboardProps {
   user: UserSession

@@ -1,31 +1,86 @@
-export interface User {
+
+export interface APIEndpoint {
   id: string
-  name: string
-  email: string
-  role: "developer" | "provider" | "admin"
-  avatar_url?: string
-  created_at: Date
-  updated_at: Date
+  apiId: string
+  path: string
+  method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH"
+  description?: string
+  parameters?: any
+  responseSchema?: any
+  createdAt: Date
+  updatedAt: Date
 }
 
-export interface API {
+// Gateway specific types
+export interface ApiKey {
+  id: string
+  userId: string
+  applicationId: string
+  name: string
+  keyPrefix: string
+  keyHash: string
+  isActive: boolean
+  lastUsedAt?: Date
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface Api {
   id: string
   name: string
   slug: string
   description: string
-  category_id: string
-  provider_id: string
-  base_url: string
-  documentation_url?: string
-  logo_url?: string
-  status: "active" | "inactive" | "deprecated"
+  categoryId: string
+  providerId: string
+  baseUrl: string
+  documentationUrl?: string
+  logoUrl?: string
+  status: "active" | "inactive" | "pending" | "deprecated"
   rating: number
-  total_requests: number
-  created_at: Date
-  updated_at: Date
-  category_name?: string
-  category_slug?: string
-  provider_name?: string
+  totalSubscribers: number
+  averageLatency: number
+  uptimePercentage: number
+  isPublic: boolean
+  isFeatured: boolean
+  createdAt: Date
+  updatedAt: Date
+}
+
+// API Subscription with extended fields
+export interface ApiSubscription extends Subscription {
+  api?: API
+  pricingPlan?: PricingPlan
+  apiKeys?: UserApiKey[]
+}
+
+// User Application with extended fields
+export interface UserApplication extends Application {
+  apiKeys?: UserApiKey[]
+}
+
+
+export interface User {
+  id: string
+  email: string
+  username: string
+  fullName?: string
+  passwordHash: string
+  role: "developer" | "provider" | "admin"
+  isVerified: boolean
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface Provider {
+  id: string
+  name: string
+  slug: string
+  description?: string
+  website?: string
+  supportEmail?: string
+  isVerified: boolean
+  createdAt: Date
+  updatedAt: Date
 }
 
 export interface Category {
@@ -33,44 +88,162 @@ export interface Category {
   name: string
   slug: string
   description?: string
-  api_count?: number
-  created_at: Date
-  updated_at: Date
 }
 
-export interface APIEndpoint {
+export interface API {
   id: string
-  api_id: string
-  path: string
-  method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH"
-  description?: string
-  parameters?: any
-  response_schema?: any
-  created_at: Date
-  updated_at: Date
-}
-
-export interface Subscription {
-  id: string
-  user_id: string
-  api_id: string
-  plan_id: string
-  status: "active" | "cancelled" | "expired"
-  current_usage: number
-  usage_limit: number
-  created_at: Date
-  updated_at: Date
+  name: string
+  slug: string
+  description: string
+  longDescription?: string
+  providerId: string
+  baseUrl: string
+  documentationUrl?: string
+  supportUrl?: string
+  termsUrl?: string
+  privacyUrl?: string
+  rating: number
+  totalSubscribers: number
+  averageLatency: number
+  uptimePercentage: number
+  status: "pending" | "active" | "inactive" | "deprecated"
+  isPublic: boolean
+  isFeatured: boolean
+  createdAt: Date
+  updatedAt: Date
+  provider?: Provider
+  categories?: Category[]
+  pricingPlans?: PricingPlan[]
 }
 
 export interface PricingPlan {
   id: string
-  api_id: string
+  apiId: string
   name: string
   description?: string
-  price: number
-  billing_period: "monthly" | "yearly"
-  request_limit: number
-  features: string[]
-  created_at: Date
-  updated_at: Date
+  priceMonthly: number
+  priceYearly: number
+  requestsPerMonth: number
+  rateLimitPerSecond: number
+  isFree: boolean
+  isPopular: boolean
+  features?: string[]
+  stripePriceIdMonthly?: string
+  stripePriceIdYearly?: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface Subscription {
+  id: string
+  userId: string
+  apiId: string
+  pricingPlanId: string
+  status: "active" | "cancelled" | "past_due" | "trialing"
+  currentPeriodStart: Date
+  currentPeriodEnd: Date
+  cancelAtPeriodEnd: boolean
+  stripeSubscriptionId?: string
+  stripeCustomerId?: string
+  createdAt: Date
+  updatedAt: Date
+  user?: User
+  api?: API
+  pricingPlan?: PricingPlan
+}
+
+export interface Application {
+  id: string
+  userId: string
+  name: string
+  description?: string
+  redirectUris?: string[]
+  createdAt: Date
+  updatedAt: Date
+  user?: User
+  apiKeys?: UserApiKey[]
+}
+
+export interface UserApiKey {
+  id: string
+  applicationId: string
+  apiId: string
+  keyValue: string
+  name?: string
+  isActive: boolean
+  createdAt: Date
+  expiresAt?: Date
+  lastUsedAt?: Date
+  createdByUserId: string
+  application?: Application
+  api?: API
+  createdBy?: User
+}
+
+export interface APIUsage {
+  id: string
+  apiId: string
+  userId: string
+  requests: number
+  dataTransferred: number
+  errors: number
+  timestamp: Date
+  api?: API
+  user?: User
+}
+
+export interface APIRequest {
+  id: string
+  apiId: string
+  userId: string
+  method: string
+  path: string
+  statusCode: number
+  latency?: number
+  requestSize?: number
+  responseSize?: number
+  ipAddress?: string
+  userAgent?: string
+  timestamp: Date
+  api?: API
+  user?: User
+}
+
+export interface Review {
+  id: string
+  apiId: string
+  userId: string
+  rating: number
+  comment?: string
+  createdAt: Date
+  updatedAt: Date
+  api?: API
+  user?: User
+}
+
+export interface ApiCategory {
+  apiId: string
+  categoryId: string
+}
+
+// Additional types for the platform
+export interface PlatformStats {
+  totalApis: number
+  totalProviders: number
+  totalUsers: number
+  totalRequestsLast24h: number
+}
+
+export interface ApiMetrics {
+  totalRequests: number
+  avgResponseTime: number
+  errorRate: number
+  lastHourRequests: number
+}
+
+export interface UsageData {
+  time: string
+  totalRequests: number
+  avgResponseTime: number
+  errorCount: number
 }

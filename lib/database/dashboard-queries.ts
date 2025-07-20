@@ -1,186 +1,259 @@
-import { db } from "@/lib/database/connection"
-import { userApplications, apiKeys, apiSubscriptions, apiUsageAnalytics } from "@/lib/database/schema"
-import { eq, and, desc, sql, count } from "drizzle-orm"
-import type { UserApplication, ApiKey, ApiSubscription } from "@/types/api"
+import { db } from "./connection"
+import { users, apis, providers, applications, userApiKeys, subscriptions, apiUsage, apiRequests } from "./schema"
+import { eq, desc, count, sum, avg, and, gte, sql } from "drizzle-orm"
+import type {
+  DashboardData,
+  PlatformStats,
+  AdminDashboardData,
+  User,
+  API,
+  APIRequest,
+  SubscriptionWithDetails,
+} from "@/types/database"
 
-export async function getUserApplicationsFromDb(userId: string): Promise<UserApplication[]> {
-  const applications = await db.query.userApplications.findMany({
-    where: eq(userApplications.userId, userId),
-    with: {
-      apiKeys: true, // Eager load API keys for each application
-    },
-    orderBy: desc(userApplications.createdAt),
-  })
-  return applications
-}
-
-export async function createApplicationInDb(
-  userId: string,
-  data: Omit<UserApplication, "id" | "userId" | "createdAt" | "updatedAt" | "apiKeys">,
-): Promise<UserApplication | null> {
-  const [newApp] = await db
-    .insert(userApplications)
-    .values({
-      ...data,
-      userId: userId,
-    })
-    .returning()
-  return newApp || null
-}
-
-export async function updateApplicationInDb(
-  appId: string,
-  data: Partial<Omit<UserApplication, "id" | "userId" | "createdAt" | "updatedAt" | "apiKeys">>,
-): Promise<UserApplication | null> {
-  const [updatedApp] = await db
-    .update(userApplications)
-    .set({
-      ...data,
-      updatedAt: new Date(),
-    })
-    .where(eq(userApplications.id, appId))
-    .returning()
-  return updatedApp || null
-}
-
-export async function deleteApplicationInDb(appId: string): Promise<boolean> {
-  const result = await db.delete(userApplications).where(eq(userApplications.id, appId))
-  return result.rowCount > 0
-}
-
-export async function getApiKeysForApplicationFromDb(applicationId: string): Promise<ApiKey[]> {
-  const keys = await db.query.apiKeys.findMany({
-    where: eq(apiKeys.applicationId, applicationId),
-    orderBy: desc(apiKeys.createdAt),
-  })
-  return keys
-}
-
-export async function getApiKeysForUserAndApi(userId: string, apiId: string): Promise<ApiKey[]> {
-  const keys = await db
-    .select()
-    .from(apiKeys)
-    .innerJoin(userApplications, eq(apiKeys.applicationId, userApplications.id))
-    .where(and(eq(userApplications.userId, userId), eq(apiKeys.apiId, apiId), eq(apiKeys.isActive, true)))
-    .orderBy(desc(apiKeys.createdAt))
-  return keys.map((row) => row.api_keys)
-}
-
-export async function createApiKeyInDb(
-  applicationId: string,
-  apiId: string,
-  keyName: string,
-  keyHash: string,
-  keyPrefix: string,
-): Promise<ApiKey | null> {
-  const [newKey] = await db
-    .insert(apiKeys)
-    .values({
-      applicationId,
-      apiId,
-      name: keyName,
-      keyHash,
-      keyPrefix,
-      isActive: true,
-      expiresAt: null, // API keys typically don't expire by default
-    })
-    .returning()
-  return newKey || null
-}
-
-export async function deleteApiKeyInDb(apiKeyId: string): Promise<boolean> {
-  const result = await db.delete(apiKeys).where(eq(apiKeys.id, apiKeyId))
-  return result.rowCount > 0
-}
-
-export async function getUserSubscriptionsFromDb(userId: string): Promise<ApiSubscription[]> {
-  const subscriptions = await db.query.apiSubscriptions.findMany({
-    where: eq(apiSubscriptions.userId, userId),
-    with: {
-      api: {
-        columns: {
-          id: true,
-          name: true,
-          slug: true,
+export async function getDashboardData(userId: string): Promise<DashboardData> {
+  try {
+    // Get user's subscriptions with API details
+    const userSubscriptions = await db
+      .select({
+        id: subscriptions.id,
+        status: subscriptions.status,
+        startDate: subscriptions.startDate,
+        endDate: subscriptions.endDate,
+        api: {
+          id: apis.id,
+          name: apis.name,
+          slug: apis.slug,
+          description: apis.description,
+          rating: apis.rating,
+          status: apis.status,
         },
-      },
-      pricingPlan: {
-        columns: {
-          id: true,
-          name: true,
-          priceMonthly: true,
+        pricingPlan: {
+          id: subscriptions.pricingPlanId,
+          name: sql<string>`'Basic'`, // Placeholder
+          requestsPerMonth: sql<number>`1000`, // Placeholder
         },
+      })
+      .from(subscriptions)
+      .innerJoin(apis, eq(subscriptions.apiId, apis.id))
+      .where(eq(subscriptions.userId, userId))
+      .orderBy(desc(subscriptions.createdAt))
+
+    // Get usage stats for user's APIs
+    const usageStats = await db
+      .select({
+        totalRequests: sum(apiUsage.requests),
+        totalErrors: sum(apiUsage.errors),
+        dataTransferred: sum(apiUsage.dataTransferred),
+      })
+      .from(apiUsage)
+      .where(eq(apiUsage.userId, userId))
+      .then(
+        (result) =>
+          result[0] || {
+            totalRequests: 0,
+            totalErrors: 0,
+            dataTransferred: 0,
+          },
+      )
+
+    // Get average latency from recent requests
+    const latencyStats = await db
+      .select({
+        averageLatency: avg(apiRequests.latency),
+      })
+      .from(apiRequests)
+      .where(
+        and(eq(apiRequests.userId, userId), gte(apiRequests.timestamp, new Date(Date.now() - 24 * 60 * 60 * 1000))),
+      )
+      .then((result) => result[0]?.averageLatency || 0)
+
+    // Get recent API requests
+    const recentRequests = await db
+      .select({
+        id: apiRequests.id,
+        method: apiRequests.method,
+        path: apiRequests.path,
+        statusCode: apiRequests.statusCode,
+        latency: apiRequests.latency,
+        timestamp: apiRequests.timestamp,
+        apiId: apiRequests.apiId,
+        userId: apiRequests.userId,
+      })
+      .from(apiRequests)
+      .where(eq(apiRequests.userId, userId))
+      .orderBy(desc(apiRequests.timestamp))
+      .limit(10)
+
+    // Get top APIs by request count
+    const topApis = await db
+      .select({
+        id: apis.id,
+        name: apis.name,
+        slug: apis.slug,
+        description: apis.description,
+        rating: apis.rating,
+        status: apis.status,
+        requestCount: count(apiRequests.id),
+      })
+      .from(apis)
+      .leftJoin(apiRequests, and(eq(apiRequests.apiId, apis.id), eq(apiRequests.userId, userId)))
+      .groupBy(apis.id)
+      .orderBy(desc(count(apiRequests.id)))
+      .limit(5)
+
+    return {
+      stats: {
+        totalRequests: Number(usageStats.totalRequests) || 0,
+        totalErrors: Number(usageStats.totalErrors) || 0,
+        averageLatency: Number(latencyStats) || 0,
+        dataTransferred: Number(usageStats.dataTransferred) || 0,
       },
-      apiKeys: {
-        columns: {
-          id: true,
-          keyPrefix: true,
-          keyHash: true,
-          name: true,
-        },
-      },
-    },
-    orderBy: desc(apiSubscriptions.createdAt),
-  })
-  return subscriptions as ApiSubscription[]
-}
-
-export async function cancelSubscriptionInDb(subscriptionId: string): Promise<ApiSubscription | null> {
-  const [updatedSubscription] = await db
-    .update(apiSubscriptions)
-    .set({
-      cancelAtPeriodEnd: true,
-      updatedAt: new Date(),
-      status: "cancelled", // Mark as cancelled immediately, but remains active until period end
-    })
-    .where(eq(apiSubscriptions.id, subscriptionId))
-    .returning()
-  return updatedSubscription || null
-}
-
-export async function getApiUsageForUser(
-  userId: string,
-  filters: { apiKeyId?: string; apiId?: string; interval?: "hour" | "day" | "month" },
-) {
-  const { apiKeyId, apiId, interval = "day" } = filters
-
-  let groupByClause: any
-  let timeFilter: any
-
-  switch (interval) {
-    case "hour":
-      groupByClause = sql`date_trunc('hour', ${apiUsageAnalytics.timestamp})`
-      timeFilter = sql`${apiUsageAnalytics.timestamp} >= NOW() - INTERVAL '24 hours'`
-      break
-    case "day":
-      groupByClause = sql`date_trunc('day', ${apiUsageAnalytics.timestamp})`
-      timeFilter = sql`${apiUsageAnalytics.timestamp} >= NOW() - INTERVAL '30 days'`
-      break
-    case "month":
-      groupByClause = sql`date_trunc('month', ${apiUsageAnalytics.timestamp})`
-      timeFilter = sql`${apiUsageAnalytics.timestamp} >= NOW() - INTERVAL '12 months'`
-      break
+      recentRequests: recentRequests as APIRequest[],
+      topApis: topApis.map((api) => ({
+        ...api,
+        requestCount: Number(api.requestCount) || 0,
+      })) as (API & { requestCount: number })[],
+      subscriptions: userSubscriptions as SubscriptionWithDetails[],
+    }
+  } catch (error) {
+    console.error("Error fetching dashboard data:", error)
+    throw new Error("Failed to fetch dashboard data")
   }
+}
 
-  let query = db
-    .select({
-      time: groupByClause,
-      totalRequests: count(apiUsageAnalytics.id),
-      avgResponseTime: sql<number>`AVG(${apiUsageAnalytics.responseTime})`,
-      errorCount: count(sql`CASE WHEN ${apiUsageAnalytics.statusCode} >= 400 THEN 1 END`),
-    })
-    .from(apiUsageAnalytics)
-    .innerJoin(apiKeys, eq(apiUsageAnalytics.apiKeyId, apiKeys.id))
-    .innerJoin(userApplications, eq(apiKeys.applicationId, userApplications.id))
-    .where(and(eq(userApplications.userId, userId), timeFilter))
+export async function getPlatformStats(): Promise<PlatformStats> {
+  try {
+    const [totalApis, totalProviders, totalUsers, totalRequestsLast24h] = await Promise.all([
+      db
+        .select({ count: count() })
+        .from(apis)
+        .then((result) => result[0]?.count || 0),
+      db
+        .select({ count: count() })
+        .from(providers)
+        .then((result) => result[0]?.count || 0),
+      db
+        .select({ count: count() })
+        .from(users)
+        .then((result) => result[0]?.count || 0),
+      db
+        .select({ count: count() })
+        .from(apiRequests)
+        .where(gte(apiRequests.timestamp, new Date(Date.now() - 24 * 60 * 60 * 1000)))
+        .then((result) => result[0]?.count || 0),
+    ])
 
-  if (apiKeyId) {
-    query = query.where(and(eq(apiKeys.id, apiKeyId)))
-  } else if (apiId) {
-    query = query.where(and(eq(apiKeys.apiId, apiId)))
+    return {
+      totalApis: Number(totalApis),
+      totalProviders: Number(totalProviders),
+      totalUsers: Number(totalUsers),
+      totalRequestsLast24h: Number(totalRequestsLast24h),
+    }
+  } catch (error) {
+    console.error("Error fetching platform stats:", error)
+    throw new Error("Failed to fetch platform stats")
   }
+}
 
-  const usageData = await query.groupBy(groupByClause).orderBy(groupByClause)
+export async function getAdminDashboardData(): Promise<Omit<AdminDashboardData, "adminUser">> {
+  try {
+    // Get platform stats
+    const platformStats = await getPlatformStats()
 
-  return usageData
+    // Get top APIs by usage
+    const topApisByUsage = await db
+      .select({
+        id: apis.id,
+        name: apis.name,
+        slug: apis.slug,
+        description: apis.description,
+        rating: apis.rating,
+        status: apis.status,
+        usageCount: sum(apiUsage.requests),
+      })
+      .from(apis)
+      .leftJoin(apiUsage, eq(apiUsage.apiId, apis.id))
+      .groupBy(apis.id)
+      .orderBy(desc(sum(apiUsage.requests)))
+      .limit(10)
+
+    // Get recent signups
+    const recentSignups = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        username: users.username,
+        fullName: users.fullName,
+        role: users.role,
+        isVerified: users.isVerified,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .orderBy(desc(users.createdAt))
+      .limit(10)
+
+    return {
+      platformStats,
+      topApisByUsage: topApisByUsage.map((api) => ({
+        ...api,
+        usageCount: Number(api.usageCount) || 0,
+      })) as (API & { usageCount: number })[],
+      recentSignups: recentSignups as User[],
+    }
+  } catch (error) {
+    console.error("Error fetching admin dashboard data:", error)
+    throw new Error("Failed to fetch admin dashboard data")
+  }
+}
+
+export async function getUserApplications(userId: string) {
+  try {
+    return await db
+      .select({
+        id: applications.id,
+        name: applications.name,
+        description: applications.description,
+        createdAt: applications.createdAt,
+        updatedAt: applications.updatedAt,
+      })
+      .from(applications)
+      .where(eq(applications.userId, userId))
+      .orderBy(desc(applications.createdAt))
+  } catch (error) {
+    console.error("Error fetching user applications:", error)
+    throw new Error("Failed to fetch user applications")
+  }
+}
+
+export async function getUserApiKeys(userId: string) {
+  try {
+    return await db
+      .select({
+        id: userApiKeys.id,
+        name: userApiKeys.name,
+        keyValue: userApiKeys.keyValue,
+        isActive: userApiKeys.isActive,
+        createdAt: userApiKeys.createdAt,
+        expiresAt: userApiKeys.expiresAt,
+        lastUsedAt: userApiKeys.lastUsedAt,
+        api: {
+          id: apis.id,
+          name: apis.name,
+          slug: apis.slug,
+        },
+        application: {
+          id: applications.id,
+          name: applications.name,
+        },
+      })
+      .from(userApiKeys)
+      .innerJoin(apis, eq(userApiKeys.apiId, apis.id))
+      .innerJoin(applications, eq(userApiKeys.applicationId, applications.id))
+      .where(eq(userApiKeys.createdByUserId, userId))
+      .orderBy(desc(userApiKeys.createdAt))
+  } catch (error) {
+    console.error("Error fetching user API keys:", error)
+    throw new Error("Failed to fetch user API keys")
+  }
 }

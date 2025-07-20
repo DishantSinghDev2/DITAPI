@@ -5,7 +5,7 @@ import { db } from "../../lib/database/connection"
 import { apiKeys, users, userApplications, apiSubscriptions, pricingPlans } from "../../lib/database/schema"
 import { eq, and } from "drizzle-orm"
 import { createHash } from "crypto"
-import { getUserSession } from "@/lib/auth/session"
+import { getUserSession } from "@/app/session"
 
 export class AuthenticationMiddleware extends GatewayMiddleware {
   private logger: GatewayLogger

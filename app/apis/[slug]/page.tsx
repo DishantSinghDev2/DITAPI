@@ -1,7 +1,7 @@
 import { ApiDetails } from "@/components/api/api-details"
 import { ApiService } from "@/lib/api-service"
 import { notFound } from "next/navigation"
-import { getUserSession } from "@/lib/auth/session"
+import { getUserSession } from "@/app/session"
 
 interface ApiDetailPageProps {
   params: {

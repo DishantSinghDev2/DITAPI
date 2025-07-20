@@ -12,9 +12,7 @@ const config = new GatewayConfig()
 const logger = new GatewayLogger(config.logLevel)
 const gatewayServer = new GatewayServer(config, logger)
 
-// This file would typically start an HTTP server if it were a standalone service.
-// Example (conceptual, not for Next.js App Router):
-/*
+
 import http from 'http';
 
 const server = http.createServer(async (req, res) => {
@@ -49,7 +47,6 @@ const PORT = process.env.GATEWAY_PORT || 8080;
 server.listen(PORT, () => {
   logger.log(`Gateway server listening on port ${PORT}`);
 });
-*/
 
 // Export the gatewayServer instance if it needs to be used elsewhere (e.g., in tests)
 export { gatewayServer }

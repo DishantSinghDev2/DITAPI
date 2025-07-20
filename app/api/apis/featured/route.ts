@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server"
-import { neon } from "@neondatabase/serverless"
+import { Pool } from "pg"
 
-const sql = neon(process.env.DATABASE_URL!)
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL environment variable is required")
+}
+
+// Initialize pool (only once per serverless function if caching is not implemented)
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+})
 
 export async function GET() {
   try {
-    const featuredApis = await sql`
+    const result = await pool.query(`
       SELECT 
         id,
         name,
@@ -21,12 +28,11 @@ export async function GET() {
       WHERE status = 'active' AND featured = true
       ORDER BY rating DESC, total_requests DESC
       LIMIT 8
-    `
+    `)
 
-    return NextResponse.json(featuredApis)
+    return NextResponse.json(result.rows)
   } catch (error) {
     console.error("Failed to fetch featured APIs:", error)
-    // Return fallback data if database fails
     return NextResponse.json([
       {
         id: "1",

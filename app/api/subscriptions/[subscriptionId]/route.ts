@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getSession } from "@/lib/auth/session"
+import { getSession } from "@/app/session"
 import { cancelSubscriptionInDb } from "@/lib/database/dashboard-queries"
 import { getSubscriptionById } from "@/lib/subscription/subscription-queries"
 

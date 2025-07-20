@@ -10,17 +10,19 @@ import {
   jsonb,
   primaryKey,
   unique,
+  index,
 } from "drizzle-orm/pg-core"
-import { relations, sql } from "drizzle-orm"
+import { relations } from "drizzle-orm"
 
 // Users Table
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
+  name: varchar("name", { length: 255 }).notNull(),
   email: varchar("email", { length: 255 }).unique().notNull(),
   username: varchar("username", { length: 255 }).unique().notNull(),
   fullName: varchar("full_name", { length: 255 }),
   passwordHash: varchar("password_hash", { length: 255 }).notNull(),
-  role: varchar("role", { length: 50 }).notNull().default("developer"), // 'developer', 'provider', 'admin'
+  role: varchar("role", { length: 50 }).notNull().default("admin"), // 'developer', 'provider', 'admin'
   isVerified: boolean("is_verified").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
@@ -73,8 +75,14 @@ export const categoriesRelations = relations(categories, ({ many }) => ({
 export const apis = pgTable("apis", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: varchar("name", { length: 255 }).notNull(),
+  logoUrl: varchar("logo_url", { length: 255 }),
   slug: varchar("slug", { length: 255 }).unique().notNull(),
   description: text("description").notNull(),
+  category: varchar("category", { length: 255 }).notNull(), // Deprecated, use apiCategories instead
+  requestCount: integer("request_count").default(0), // Total requests made to this API
+  categoryId: uuid("category_id")
+    .notNull()
+    .references(() => categories.id, { onDelete: "cascade" }),
   longDescription: text("long_description"),
   providerId: uuid("provider_id")
     .notNull()
@@ -247,6 +255,10 @@ export const userApiKeys = pgTable(
   "user_api_keys",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    keyPrefix: varchar("key_prefix", { length: 8 }).notNull(), // e.g., "dk_12345678"
     applicationId: uuid("application_id")
       .notNull()
       .references(() => applications.id, { onDelete: "cascade" }),
@@ -254,6 +266,7 @@ export const userApiKeys = pgTable(
       .notNull()
       .references(() => apis.id, { onDelete: "cascade" }), // Which API this key is for
     keyValue: varchar("key_value", { length: 255 }).unique().notNull(), // The actual API key string
+    keyHash: varchar("key_hash", { length: 64 }).notNull(), // Hashed version of the key for security
     name: varchar("name", { length: 255 }), // A user-friendly name for the key
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
@@ -298,9 +311,15 @@ export const apiUsage = pgTable(
     dataTransferred: numeric("data_transferred", { precision: 15, scale: 2 }).notNull().default("0.00"), // in bytes
     errors: integer("errors").notNull().default(0),
     timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(), // Granularity can be hourly/daily
+    hourBucket: varchar("hour_bucket", { length: 20 }), // Format: YYYY-MM-DD-HH for hourly aggregation
   },
   (t) => ({
-    unq: unique("api_user_hourly_usage_unique").on(t.apiId, t.userId, sql`date_trunc('hour', ${t.timestamp})`), // Aggregate hourly usage
+    // Use a simple unique constraint on api_id, user_id, and hour_bucket
+    unq: unique("api_user_hourly_usage_unique").on(t.apiId, t.userId, t.hourBucket!),
+    // Add indexes for better query performance
+    apiIdIdx: index("api_usage_api_id_idx").on(t.apiId),
+    userIdIdx: index("api_usage_user_id_idx").on(t.userId),
+    timestampIdx: index("api_usage_timestamp_idx").on(t.timestamp),
   }),
 )
 
@@ -316,24 +335,33 @@ export const apiUsageRelations = relations(apiUsage, ({ one }) => ({
 }))
 
 // API Request Logs Table (for detailed request/response logging)
-export const apiRequests = pgTable("api_requests", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  apiId: uuid("api_id")
-    .notNull()
-    .references(() => apis.id, { onDelete: "cascade" }),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  method: varchar("method", { length: 10 }).notNull(),
-  path: text("path").notNull(),
-  statusCode: integer("status_code").notNull(),
-  latency: integer("latency"), // in milliseconds
-  requestSize: integer("request_size"), // in bytes
-  responseSize: integer("response_size"), // in bytes
-  ipAddress: varchar("ip_address", { length: 45 }),
-  userAgent: text("user_agent"),
-  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
-})
+export const apiRequests = pgTable(
+  "api_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    apiId: uuid("api_id")
+      .notNull()
+      .references(() => apis.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    method: varchar("method", { length: 10 }).notNull(),
+    path: text("path").notNull(),
+    statusCode: integer("status_code").notNull(),
+    latency: integer("latency"), // in milliseconds
+    requestSize: integer("request_size"), // in bytes
+    responseSize: integer("response_size"), // in bytes
+    ipAddress: varchar("ip_address", { length: 45 }),
+    userAgent: text("user_agent"),
+    timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
+  },
+  (t) => ({
+    // Add indexes for better query performance
+    apiIdIdx: index("api_requests_api_id_idx").on(t.apiId),
+    userIdIdx: index("api_requests_user_id_idx").on(t.userId),
+    timestampIdx: index("api_requests_timestamp_idx").on(t.timestamp),
+  }),
+)
 
 export const apiRequestsRelations = relations(apiRequests, ({ one }) => ({
   api: one(apis, {

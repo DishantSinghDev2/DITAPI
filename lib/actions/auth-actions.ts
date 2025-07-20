@@ -1,10 +1,9 @@
 "use server"
+
 import { redirect } from "next/navigation"
 import bcrypt from "bcryptjs"
-import { neon } from "@neondatabase/serverless"
-import { createSession, deleteSession } from "@/lib/auth/session"
-
-const sql = neon(process.env.DATABASE_URL!)
+import { pool } from "@/lib/database/connection"
+import { createSession, deleteSession } from "@/app/session"
 
 export async function signUp(formData: FormData) {
   const email = formData.get("email") as string
@@ -16,30 +15,29 @@ export async function signUp(formData: FormData) {
   }
 
   try {
-    // Check if user already exists
-    const existingUser = await sql`
-      SELECT id FROM users WHERE email = ${email}
-    `
+    const { rows: existing } = await pool.query(
+      `SELECT id FROM users WHERE email = $1`,
+      [email]
+    )
 
-    if (existingUser.length > 0) {
+    if (existing.length > 0) {
       return { error: "User already exists" }
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 12)
 
-    // Create user
-    const result = await sql`
-      INSERT INTO users (name, email, password, role, created_at, updated_at)
-      VALUES (${name}, ${email}, ${hashedPassword}, 'developer', NOW(), NOW())
-      RETURNING id, name, email, role
-    `
+    const { rows } = await pool.query(
+      `INSERT INTO users (name, username, email, password_hash, role, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, 'admin', NOW(), NOW())
+       RETURNING id, name, username, email, role`,
+      [name, name, email, hashedPassword]
+    )
 
-    const user = result[0]
+    const user = rows[0]
 
-    // Create session
     await createSession({
       id: user.id,
+      username: user.username,
       email: user.email,
       name: user.name,
       role: user.role,
@@ -61,27 +59,26 @@ export async function signIn(formData: FormData) {
   }
 
   try {
-    // Find user
-    const users = await sql`
-      SELECT id, name, email, password, role FROM users WHERE email = ${email}
-    `
+    const { rows } = await pool.query(
+      `SELECT id, name, username, email, password_hash, role FROM users WHERE email = $1`,
+      [email]
+    )
 
-    if (users.length === 0) {
+    if (rows.length === 0) {
       return { error: "Invalid credentials" }
     }
 
-    const user = users[0]
+    const user = rows[0]
 
-    // Verify password
-    const isValid = await bcrypt.compare(password, user.password)
+    const isValid = await bcrypt.compare(password, user.password_hash)
 
     if (!isValid) {
       return { error: "Invalid credentials" }
     }
 
-    // Create session
     await createSession({
       id: user.id,
+      username: user.username,
       email: user.email,
       name: user.name,
       role: user.role,
@@ -99,7 +96,7 @@ export async function signOut() {
   redirect("/")
 }
 
-// Export alias for compatibility
+// Aliases
 export const loginUser = signIn
 export const registerUser = signUp
 export const signOutUser = signOut

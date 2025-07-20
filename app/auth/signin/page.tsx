@@ -3,12 +3,12 @@ import Link from "next/link"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Terminal } from "lucide-react"
 
-export default function SigninPage({
+export default async function SigninPage({
   searchParams,
 }: {
   searchParams: { message: string; redirect?: string }
 }) {
-  const { message, redirect } = searchParams
+  const { message, redirect } = await searchParams
 
   let alertMessage = null
   if (message === "signup_success") {

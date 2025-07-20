@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/use-toast"
 import type { API, UserApiKey } from "@/types/api"
 import { ApiService } from "@/lib/api-service"
-import { useSession } from "@/lib/auth/session" // Assuming a client-side hook for session
+import { useSession } from "@/app/session" // Assuming a client-side hook for session
 
 interface ApiTesterProps {
   api: API

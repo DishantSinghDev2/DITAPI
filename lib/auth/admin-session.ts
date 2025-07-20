@@ -1,4 +1,4 @@
-import { getSession } from "./session"
+import { getSession } from "../../app/session"
 import { db } from "@/lib/database/connection"
 import { users } from "@/lib/database/schema"
 import { eq } from "drizzle-orm"

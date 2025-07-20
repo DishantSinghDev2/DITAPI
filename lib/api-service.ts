@@ -100,6 +100,12 @@ export class ApiService {
     return deleteUser(id)
   }
 
+  static async getAllUsers(limit = 50, offset = 0): Promise<User[]> {
+    // This would need to be implemented in production-queries.ts
+    // For now, return empty array
+    return []
+  }
+
   // --- API Operations ---
   static async createApi(
     api: Omit<
@@ -108,23 +114,23 @@ export class ApiService {
       | "createdAt"
       | "updatedAt"
       | "rating"
-      | "total_subscribers"
-      | "average_latency"
-      | "uptime_percentage"
+      | "totalSubscribers"
+      | "averageLatency"
+      | "uptimePercentage"
       | "status"
-      | "is_public"
-      | "is_featured"
+      | "isPublic"
+      | "isFeatured"
     >,
   ): Promise<API | undefined> {
     return createApi({
       ...api,
       rating: 0,
-      total_subscribers: 0,
-      average_latency: 0,
-      uptime_percentage: 100,
+      totalSubscribers: 0,
+      averageLatency: 0,
+      uptimePercentage: 100,
       status: "pending",
-      is_public: false,
-      is_featured: false,
+      isPublic: false,
+      isFeatured: false,
     })
   }
 
@@ -162,9 +168,9 @@ export class ApiService {
 
   // --- Provider Operations ---
   static async createProvider(
-    provider: Omit<Provider, "id" | "createdAt" | "updatedAt" | "is_verified">,
+    provider: Omit<Provider, "id" | "createdAt" | "updatedAt" | "isVerified">,
   ): Promise<Provider | undefined> {
-    return createProvider({ ...provider, is_verified: false })
+    return createProvider({ ...provider, isVerified: false })
   }
 
   static async getProviderById(id: string): Promise<Provider | undefined> {
@@ -229,9 +235,22 @@ export class ApiService {
 
   // --- Subscription Operations ---
   static async createSubscription(
-    subscription: Omit<Subscription, "id" | "createdAt" | "updatedAt" | "status" | "startDate" | "endDate">,
+    subscription: Omit<
+      Subscription,
+      "id" | "createdAt" | "updatedAt" | "status" | "currentPeriodStart" | "currentPeriodEnd"
+    >,
   ): Promise<Subscription | undefined> {
-    return createSubscription({ ...subscription, status: "active", startDate: new Date(), endDate: null })
+    const now = new Date()
+    const endDate = new Date(now)
+    endDate.setMonth(endDate.getMonth() + 1) // Default to 1 month subscription
+
+    return createSubscription({
+      ...subscription,
+      status: "active",
+      currentPeriodStart: now,
+      currentPeriodEnd: endDate,
+      cancelAtPeriodEnd: false,
+    })
   }
 
   static async getSubscriptionById(id: string): Promise<Subscription | undefined> {

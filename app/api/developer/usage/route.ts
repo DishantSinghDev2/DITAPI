@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getSession } from "@/lib/auth/session"
+import { getSession } from "@/app/session"
 import { getApiUsageForUser } from "@/lib/database/dashboard-queries"
 
 export async function GET(request: Request) {

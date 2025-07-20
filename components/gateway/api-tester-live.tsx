@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Play, Copy } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { generateApiKey } from "@/lib/actions/api-key-actions"
-import { getSession } from "@/lib/auth/session"
+import { getSession } from "@/app/session"
 import type { Api, ApiKey, UserSession } from "@/types/api"
 import { useEffect } from "react"
 import { getApiKeysForUserAndApi } from "@/lib/database/dashboard-queries"

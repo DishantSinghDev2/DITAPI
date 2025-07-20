@@ -1,28 +1,35 @@
+import { redirect } from "next/navigation"
+import { getSession } from "@/app/session"
 import { AdminDashboard } from "@/components/admin/admin-dashboard"
 import { ApiService } from "@/lib/api-service"
-import { getUserSession } from "@/lib/auth/session"
-import { redirect } from "next/navigation"
-import type { User, API } from "@/types/database"
+import type { User } from "@/types/database"
 
 export default async function AdminPage() {
-  const session = await getUserSession()
+  const session = await getSession()
 
-  if (!session || session.user.role !== "admin") {
-    redirect("/auth/signin?callbackUrl=/admin")
+  if (!session || session.role !== "admin") {
+    redirect("/auth/signin")
   }
 
+  // Get admin user details
+  const adminUser = (await ApiService.getUserById(session.id)) as User
+  if (!adminUser) {
+    redirect("/auth/signin")
+  }
+
+  // Get platform statistics
   const platformStats = await ApiService.getPlatformOverviewStats()
-  const topApisByUsage: API[] = await ApiService.getTopApisByUsage(5)
-  // For recent signups, you'd typically have a query to get users ordered by creation date
-  // For now, let's mock some recent users or fetch all and sort (not efficient for large datasets)
-  const allUsers = await ApiService.getAllUsers() // Assuming a new getAllUsers method in ApiService
-  const recentSignups: User[] = allUsers
-    .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())
-    .slice(0, 5)
+  const topApisByUsage = await ApiService.getTopApisByUsage(5)
+  const recentSignups = await ApiService.getAllUsers(10, 0) // Get recent 10 users
 
   return (
-    <div className="container mx-auto py-12">
-      <AdminDashboard platformStats={platformStats} topApisByUsage={topApisByUsage} recentSignups={recentSignups} />
+    <div className="container mx-auto px-4 py-8">
+      <AdminDashboard
+        adminUser={adminUser}
+        platformStats={platformStats}
+        topApisByUsage={topApisByUsage}
+        recentSignups={recentSignups}
+      />
     </div>
   )
 }

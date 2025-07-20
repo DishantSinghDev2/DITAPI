@@ -3,9 +3,9 @@ import { defineConfig } from "drizzle-kit"
 export default defineConfig({
   schema: "./lib/database/schema.ts",
   out: "./drizzle",
-  driver: "pg",
+  dialect: "postgresql", // This is the correct way to specify your database type
   dbCredentials: {
-    connectionString: process.env.DATABASE_URL,
+    url: process.env.DATABASE_URL,
   },
   verbose: true,
   strict: true,

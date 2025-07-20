@@ -1,6 +1,6 @@
 import { ProviderDashboard } from "@/components/providers/provider-dashboard"
 import { ApiService } from "@/lib/api-service"
-import { getUserSession } from "@/lib/auth/session"
+import { getUserSession } from "@/app/session"
 import { redirect } from "next/navigation"
 import type { Provider, API } from "@/types/database"
 
