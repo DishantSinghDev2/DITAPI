@@ -1,40 +1,56 @@
-import { NextResponse } from "next/server"
-import { pool } from "@/lib/database/connection"
+import { type NextRequest, NextResponse } from "next/server"
+import { requireAuth } from "@/lib/auth-middleware"
+import { getDatabase } from "@/lib/db"
+import { ObjectId } from "mongodb"
 
-export async function GET() {
+export async function POST(request: NextRequest) {
   try {
-    const { rows: apis } = await pool.query(`
-      SELECT 
-        a.id,
-        a.name,
-        a.slug,
-        a.description,
-        a.category_id,
-        a.provider_id,
-        a.base_url,
-        a.documentation_url,
-        a.logo_url,
-        a.status,
-        a.rating,
-        a.total_requests,
-        a.created_at,
-        c.name AS category_name,
-        c.slug AS category_slug,
-        u.name AS provider_name
-      FROM apis a
-      LEFT JOIN categories c ON a.category_id = c.id
-      LEFT JOIN users u ON a.provider_id = u.id
-      WHERE a.status = 'active'
-      ORDER BY a.rating DESC, a.total_requests DESC
-      LIMIT 50
-    `)
+    const session = await requireAuth()
+    const { organizationId, name, slug, description, baseUrl, authentication, version } = await request.json()
 
-    return NextResponse.json({
-      success: true,
-      apis,
+    const db = await getDatabase()
+    const user = await db.collection("users").findOne({
+      email: session.user?.email,
     })
+
+    // Verify user is part of organization
+    const org = await db.collection("organizations").findOne({
+      _id: new ObjectId(organizationId),
+      "members.userId": new ObjectId(user._id),
+    })
+
+    if (!org) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+    }
+
+    const result = await db.collection("apis").insertOne({
+      name,
+      slug,
+      description,
+      baseUrl,
+      organizationId: new ObjectId(organizationId),
+      authentication,
+      version,
+      status: "active",
+      endpoints: [
+        {
+          path: "/health",
+          method: "GET",
+          description: "Health check endpoint",
+          requiresAuth: false,
+        },
+      ],
+      rateLimit: {
+        requestsPerMinute: 60,
+        requestsPerDay: 10000,
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+
+    return NextResponse.json({ apiId: result.insertedId }, { status: 201 })
   } catch (error) {
-    console.error("Failed to fetch APIs:", error)
-    return NextResponse.json({ success: false, error: "Failed to fetch APIs" }, { status: 500 })
+    console.error("Error creating API:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

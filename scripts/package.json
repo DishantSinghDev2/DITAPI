@@ -1,0 +1,17 @@
+{
+  "name": "api-marketplace-workers",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node dist/workers.js",
+    "dev": "tsx scripts/workers.ts",
+    "build": "tsc scripts/workers.ts --outDir dist"
+  },
+  "dependencies": {
+    "@types/node": "^22",
+    "bull": "^4.14.0",
+    "mongodb": "^6.3.0",
+    "redis": "^4.6.0",
+    "typescript": "^5"
+  }
+}

@@ -1,41 +1,71 @@
-import { NextResponse } from "next/server"
-import { getSession } from "@/app/session"
-import { cancelSubscriptionInDb } from "@/lib/database/dashboard-queries"
-import { getSubscriptionById } from "@/lib/subscription/subscription-queries"
+import { type NextRequest, NextResponse } from "next/server"
+import { requireAuth } from "@/lib/auth-middleware"
+import { getDatabase } from "@/lib/db"
+import { ObjectId } from "mongodb"
 
-export async function DELETE(request: Request, { params }: { params: { subscriptionId: string } }) {
-  const session = await getSession()
-
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
-
-  const { subscriptionId } = params
-
+export async function GET(request: NextRequest, { params }: { params: Promise<{ subscriptionId: string }> }) {
   try {
-    const subscription = await getSubscriptionById(subscriptionId)
+    const session = await requireAuth()
+    const { subscriptionId } = await params
+
+    const db = await getDatabase()
+    const user = await db.collection("users").findOne({
+      email: session.user?.email,
+    })
+
+    const subscription = await db.collection("subscriptions").findOne({
+      _id: new ObjectId(subscriptionId),
+      userId: user._id,
+    })
 
     if (!subscription) {
       return NextResponse.json({ error: "Subscription not found" }, { status: 404 })
     }
 
-    // Ensure the user owns the subscription or is an admin
-    if (subscription.userId !== session.user.id && session.user.role !== "admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
+    // Get usage stats
+    const usage = await db
+      .collection("usage")
+      .find({ subscriptionId: new ObjectId(subscriptionId) })
+      .sort({ date: -1 })
+      .limit(30)
+      .toArray()
 
-    const updatedSubscription = await cancelSubscriptionInDb(subscriptionId)
-
-    if (updatedSubscription) {
-      return NextResponse.json(
-        { success: true, message: "Subscription cancelled successfully.", subscription: updatedSubscription },
-        { status: 200 },
-      )
-    } else {
-      return NextResponse.json({ success: false, message: "Failed to cancel subscription." }, { status: 500 })
-    }
+    return NextResponse.json({ subscription, usage })
   } catch (error) {
-    console.error("Error cancelling subscription:", error)
-    return NextResponse.json({ success: false, message: "Internal server error." }, { status: 500 })
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ subscriptionId: string }> }) {
+  try {
+    const session = await requireAuth()
+    const { subscriptionId } = await params
+
+    const db = await getDatabase()
+    const user = await db.collection("users").findOne({
+      email: session.user?.email,
+    })
+
+    const result = await db.collection("subscriptions").updateOne(
+      {
+        _id: new ObjectId(subscriptionId),
+        userId: user._id,
+      },
+      {
+        $set: {
+          status: "cancelled",
+          cancelledAt: new Date(),
+          updatedAt: new Date(),
+        },
+      },
+    )
+
+    if (result.matchedCount === 0) {
+      return NextResponse.json({ error: "Subscription not found" }, { status: 404 })
+    }
+
+    return NextResponse.json({ message: "Subscription cancelled" })
+  } catch (error) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 }
